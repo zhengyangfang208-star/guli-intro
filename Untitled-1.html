@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>整柜总成本计算（按采购价区间套运费）</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+           margin: 0; padding: 16px; line-height: 1.6; }
+    .card { max-width: 880px; margin: 0 auto; background: rgba(127,127,127,.06);
+            border-radius: 14px; padding: 16px 18px; }
+    h1 { font-size: 20px; margin: 6px 0 12px; }
+    label { display:block; font-weight:600; margin: 10px 0 6px; }
+    input[type="number"] { width: 100%; box-sizing: border-box; font-size: 16px;
+      padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(127,127,127,.35); }
+    button { margin-top:14px; padding: 10px 14px; font-size: 15px; border-radius: 10px;
+      border: none; background:#2563eb; color:#fff; }
+    button:active { transform: translateY(1px); }
+    .muted { opacity:.75; font-size: 13px; }
+    .result { margin-top: 16px; font-size: 16px; }
+    .hr { height:1px; background: rgba(127,127,127,.25); margin:14px 0; }
+    table { width:100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border:1px solid rgba(127,127,127,.35); padding:8px 10px; }
+    th { text-align:left; background: rgba(127,127,127,.12); }
+    @media (min-width: 760px){
+      .grid { display:grid; grid-template-columns: 320px 1fr; gap:18px; align-items: start;}
+      button { width:auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>整柜总成本计算（按采购价区间套运费）</h1>
+    <div class="grid">
+      <div>
+        <label for="weight">重量（吨）</label>
+        <input id="weight" type="number" step="0.01" min="0" value="28" />
+        <label for="purchase">采购价（万元）</label>
+        <input id="purchase" type="number" step="0.001" min="0" value="48.384" />
+        <div class="muted">说明：采购价单位为“万元人民币”；运费单位是“元/吨”。</div>
+        <button id="calc">计算</button>
+      </div>
+      <div>
+        <div id="summary" class="result"></div>
+        <div class="hr"></div>
+        <h3 style="margin:6px 0 10px;">明细</h3>
+        <div style="overflow:auto;">
+          <table id="detail">
+            <thead><tr><th>指标</th><th>数值</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const freightTable = [
+  {low:30, high:40, price:26000},
+  {low:40, high:50, price:26000},
+  {low:50, high:60, price:27000},
+  {low:60, high:70, price:27000},
+  {low:70, high:80, price:27500},
+  {low:80, high:90, price:28000},
+];
+
+function pickFreightPerTon(purchaseWan){
+  let row = freightTable.find(r => purchaseWan >= r.low && purchaseWan < r.high);
+  if(!row){
+    if(purchaseWan < Math.min(...freightTable.map(r=>r.low))) row = freightTable[0];
+    else row = freightTable[freightTable.length-1];
+  }
+  return row.price;
+}
+
+function fmt(n, digits=0){
+  if (Number.isFinite(n)) return n.toLocaleString(undefined, {maximumFractionDigits:digits});
+  return '';
+}
+
+function compute(weight, purchaseWan){
+  const freightPerTon = pickFreightPerTon(purchaseWan);
+  const purchaseYuan = purchaseWan * 10000;
+
+  const freightTotal = freightPerTon * weight;
+  const total = purchaseYuan + freightTotal;
+  const perTon = total / weight;
+
+  const freightPerTon1200 = freightPerTon + 1200;
+  const freightTotal1200 = freightPerTon1200 * weight;
+  const total1200 = purchaseYuan + freightTotal1200;
+  const perTon1200 = total1200 / weight;
+
+  return {
+    freightPerTon, freightTotal, total, perTon,
+    freightPerTon1200, freightTotal1200, total1200, perTon1200
+  };
+}
+
+document.getElementById('calc').addEventListener('click', () => {
+  const w = parseFloat(document.getElementById('weight').value);
+  const p = parseFloat(document.getElementById('purchase').value);
+  if(!(w>0)) { alert('重量必须大于 0'); return; }
+  if(!(p>=0)) { alert('采购价不能为负数'); return; }
+
+  const r = compute(w, p);
+
+  // 结果区
+  document.getElementById('summary').innerHTML = `
+    每吨运费：<b>${fmt(r.freightPerTon)}</b> 元/吨<br>
+    运费总额：<b>${fmt(r.freightTotal)}</b> 元<br>
+    总价（采购价+运费）：<b>${fmt(r.total)}</b> 元<br>
+    单吨总成本：<b>${fmt(r.perTon, 2)}</b> 元/吨
+    <div class="hr"></div>
+    每吨运费+1200 后：<b>${fmt(r.freightPerTon1200)}</b> 元/吨<br>
+    运费总额（+1200）：<b>${fmt(r.freightTotal1200)}</b> 元<br>
+    总价（+1200）：<b>${fmt(r.total1200)}</b> 元<br>
+    单吨总成本（+1200）：<b>${fmt(r.perTon1200, 2)}</b> 元/吨
+  `;
+
+  // 明细表
+  const rows = [
+    ['重量（吨）', w.toFixed(2)],
+    ['采购价（万元）', p.toFixed(2)],
+    ['每吨运费（元/吨）', fmt(r.freightPerTon)],
+    ['运费总额（元）', fmt(r.freightTotal)],
+    ['总价（元）', fmt(r.total)],
+    ['单吨总成本（元/吨）', fmt(r.perTon,2)],
+    ['每吨运费+1200（元/吨）', fmt(r.freightPerTon1200)],
+    ['运费总额（+1200）（元）', fmt(r.freightTotal1200)],
+    ['总价（+1200）（元）', fmt(r.total1200)],
+    ['单吨总成本（+1200）（元/吨）', fmt(r.perTon1200,2)],
+  ];
+  const tbody = document.querySelector('#detail tbody');
+  tbody.innerHTML = rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+});
+
+// 页面载入后先算一次
+document.getElementById('calc').click();
+</script>
+</body>
+</html>
